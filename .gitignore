@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+new_seed.txt
+position_matches.txt
+pattern_matches.txt
+missing_words.txt
+descrambled.txt
+tokenlist_matches.txt
+wrong_word_match.txt
+tokenlist.txt
+.env
