@@ -13,10 +13,10 @@ The program provides local tools for these 12-word BIP-39 operations:
 3. Replace 1-5 missing words represented as "?" and print only valid BIP-39 12 word seed phrases compatible with XRP addresses as "missing_words.txt".
 4. Validate a 12 word seed phrase and derive its XRP address.
 5. Display the XRP address for a valid 12 word seed phrase.
-6. Permute 12 supplied words and print only the valid BIP-39 phrases derived using the derivation path "m/44'/144'/0'/0/0".
+6. Permute 12 supplied words and print only the valid BIP-39 phrases derived using the derivation path "m/44'/144'/0'/0/0". Saved to 'descrambled.txt'
 7. Generate a new seed phrase and address.
 8. Search a fixed-position and/or an unanchored tokenlist.txt for a target address.
-9. Automatically tests possible 1-4 incorrect words against a target "r" address. 
+9. Automatically tests 1-4 possible incorrect words in any position against a target "r" address. 
 
 These operations may be computationally intensive. Use reasonable process and batch settings, and monitor system temperature, memory usage, and power consumption. Address derivation uses `m/44'/144'/0'/0/0`. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in one process. The terminal shows progress, speed and ETA. Four unknown wrong words in mode 9 can require an impractically long exhaustive search as well as 5 missing in mode 1.
 
@@ -117,7 +117,7 @@ Example:
 word1 word2 ? word4 word5 ? word7 word8 word9 word10 word11 word12
 ```
 
-Mode 1 replaces only marked positions. Mode 9 takes twelve supplied BIP-39 words and tests which one to four positions may be wrong; it does not use `?`.
+Mode 1 replaces only marked positions. Mode 9 takes twelve supplied BIP-39 words and tests which 1-4 words may be wrong; it does not use `?`.
 
 ## Token Lists
 
@@ -125,7 +125,16 @@ Token-list mode uses candidate groups assigned to seed positions. Unanchored pos
 
 Do not publish a token list containing a genuine or partially reconstructed seed phrase.
 
-***  Inspired by https://github.com/d31337m3/seedy/  ***
+
+# Acknowledgements
+
+***   https://github.com/gurnec/btcrecover   ***
+
+***   https://github.com/3rdIteration/btcrecover   ***
+
+***   https://github.com/d31337m3/seedy/  ***
+
+
 
 
 
