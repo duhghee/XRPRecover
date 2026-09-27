@@ -1,37 +1,24 @@
+
+
 # XRP Seed Recovery Tool
 
-A multiprocessing Python utility for recovering and validating 12-word BIP39 seed phrases associated with XRP Ledger classic addresses.
-
-## Important Warning
-
-Use this program only with wallets that you own or are explicitly authorized to recover.
-
-Never upload or share any of the following:
-
-- Real seed phrases
-- Private keys
-- Wallet recovery files
-- Token lists containing actual seed words
-- XRP addresses you consider private
-- Search results or saved recovery progress containing sensitive information
-
-For maximum security, run the program on an offline computer.
+A multiprocessing open-source Python utility for recovering and validating 12-word BIP39 seed phrases associated with XRP Ledger classic addresses locally using the standard derivation path "m/44'/144'/0'/0/0". The tool is intended for legitimate wallet recovery, testing, and educational use. It operates on candidate phrases supplied by the user.
 
 ## Features
 
-The program provides these 12-word BIP-39 operations:
+The program provides local tools for these 12-word BIP-39 operations:
 
-1. Replace 1–5 positions marked `?` and match an XRP classic address.
-2. Search for XRP addresses ending with a supplied pattern.
-3. Fill missing words and print valid BIP-39 phrases.
-4. Validate a seed phrase and display its XRP address.
-5. Display the XRP address for a valid phrase.
-6. Permute 12 supplied words and print valid BIP-39 phrases.
+1. Testing replacement words in selected positions by replaceing 1–5 positions marked `?` and match an XRP classic address.
+2. Search for XRP addresses ending with a specific pattern. Such as the last six of a target "r" address. 
+3. Replace 1-5 missing words represented as "?" and print only valid BIP-39 12 word seed phrases compatible with XRP addresses as "missing_words.txt".
+4. Validate a 12 word seed phrase and derive its XRP address.
+5. Display the XRP address for a valid 12 word seed phrase.
+6. Permute 12 supplied words and print only the valid BIP-39 phrases derived using the derivation path "m/44'/144'/0'/0/0".
 7. Generate a new seed phrase and address.
-8. Search a fixed-position and unanchored tokenlist for a target address.
-9. Replace words at any 1–4 positions to match a target XRP address.
+8. Search a fixed-position and/or an unanchored tokenlist.txt for a target address.
+9. Automatically tests possible 1-4 incorrect words against a target "r" address. 
 
-Address derivation uses `m/44'/144'/0'/0/0`. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in one process. The terminal shows progress and speed. Four unknown wrong words in mode 9 can require an impractically long exhaustive search.
+These operations may be computationally intensive. Use reasonable process and batch settings, and monitor system temperature, memory usage, and power consumption. Address derivation uses `m/44'/144'/0'/0/0`. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in one process. The terminal shows progress, speed and ETA. Four unknown wrong words in mode 9 can require an impractically long exhaustive search as well as 5 missing in mode 1.
 
 ## Requirements
 
@@ -139,6 +126,7 @@ Token-list mode uses candidate groups assigned to seed positions. Unanchored pos
 Do not publish a token list containing a genuine or partially reconstructed seed phrase.
 
 ***  Inspired by https://github.com/d31337m3/seedy/  ***
+
 
 
 
