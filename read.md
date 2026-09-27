@@ -1,13 +1,3 @@
-# XRP Seed Recovery Tool
-
-A local, open-source Python utility for recovering and validating **your own** 12-word BIP39 seed phrases associated with XRP Ledger classic addresses.
-
-The tool is intended for legitimate wallet recovery, testing, and educational use. It operates on candidate phrases supplied by the user and derives XRP addresses locally using the standard derivation path:
-
-```text
-m/44'/144'/0'/0/0
-```
-
 ## Intended Use
 
 Use XRPRecover only when:
@@ -47,22 +37,23 @@ The authors and contributors are not responsible for:
 
 By using this project, you acknowledge that you are using it at your own risk and only for wallets and data you are authorized to access.
 
-## Features
-
-The program provides local tools for:
-
-1. Testing replacement words in selected positions.
-2. Searching for XRP addresses matching a supplied pattern.
-3. Filling missing words and validating BIP39 phrases.
-4. Validating a seed phrase and deriving its XRP address.
-5. Deriving an XRP address from a valid phrase.
-6. Permuting supplied words and checking BIP39 validity.
-7. Generating a new seed phrase and address.
-8. Searching authorized candidate token lists.
-9. Testing possible incorrect words against a target address.
-
-These operations may be computationally intensive. Use reasonable process and batch settings, and monitor system temperature, memory usage, and power consumption.
 
 ## Responsible Disclosure
 
 Please do not include seed phrases, private keys, funded addresses, token lists, recovery files, or other sensitive wallet data in issues or pull requests. For security concerns, describe the problem using sanitized examples and omit all secrets.
+
+## Important Warning
+
+Use this program only with wallets that you own or are explicitly authorized to recover.
+
+Never upload or share any of the following:
+
+- Real seed phrases
+- Private keys
+- Wallet recovery files
+- Token lists containing actual seed words
+- XRP addresses you consider private
+- Search results or saved recovery progress containing sensitive information
+
+For maximum security, run the program on an offline computer.
+
