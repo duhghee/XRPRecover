@@ -798,27 +798,52 @@ def search_tokenlist_for_address(filename, target_address, processes=1,
 
     return matches
 
-def descramble_seed(scrambled_words, wordlist):
+def descramble_seed(scrambled_words, wordlist, results_per_file=10_000_000):
     if len(scrambled_words) != SEED_LENGTH:
         print(f"\n✗ Invalid: Seed phrase must contain exactly {SEED_LENGTH} words")
-        return []
-    
-    tracker = ProgressTracker("Descrambling")
-    valid_phrases = []
+        return 0
+
+    tracker = ProgressTracker("Descrambling", math.factorial(len(scrambled_words)))
     mnemo = Mnemonic("english")
-    
+    valid_count = 0
+    file_number = 0
+    output_file = None
+    output_filename = None
+
+    def open_next_file():
+        nonlocal file_number, output_filename
+        file_number += 1
+        output_filename = f"descrambled_{file_number:04d}.txt"
+        print(f"\n💾 Writing results to '{output_filename}'")
+        return open(output_filename, "w", encoding="utf-8", buffering=1024 * 1024)
+
     print(f"Testing permutations of {len(scrambled_words)} words...")
-    
+    print(f"Each output file will contain up to {results_per_file:,} valid results.")
+
     try:
         for perm in itertools.permutations(scrambled_words):
             phrase = " ".join(perm)
             if mnemo.check(phrase):
-                valid_phrases.append(phrase)
-                print(f"\nFound valid phrase: {phrase}")
+                if valid_count % results_per_file == 0:
+                    if output_file is not None:
+                        output_file.close()
+                    output_file = open_next_file()
+
+                valid_count += 1
+                output_file.write(f"Option {valid_count}:\n{phrase}\n")
+
             tracker.update()
+        tracker.finish()
     except KeyboardInterrupt:
         print("\nSearch interrupted by user")
-    return valid_phrases
+    finally:
+        if output_file is not None:
+            output_file.close()
+
+    if valid_count:
+        print(f"\nFound {valid_count:,} valid combinations.")
+        print(f"Results saved across {file_number:,} file(s): descrambled_0001.txt through {output_filename}")
+    return valid_count
 
 def print_banner():
     banner = """
@@ -1020,16 +1045,8 @@ def main():
             print(f"\n⚠️ Input contains {len(scrambled)} words. Please provide exactly {SEED_LENGTH} words.")
             return
         
-        valid_phrases = descramble_seed(scrambled, wordlist)
-        if valid_phrases:
-            print(f"\nFound {len(valid_phrases)} valid combinations!")
-            with open('descrambled.txt', 'w') as f:
-                for i, phrase in enumerate(valid_phrases, 1):
-                    output = f"\nOption {i}:\n{phrase}"
-                    print(output)
-                    f.write(output + "\n")
-            print("\nResults saved to 'descrambled.txt'")
-        else:
+        valid_count = descramble_seed(scrambled, wordlist, results_per_file=10_000_000)
+        if not valid_count:
             print("\nNo valid combinations found")
 
     elif mode == "7":
