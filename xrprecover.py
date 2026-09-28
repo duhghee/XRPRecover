@@ -331,12 +331,12 @@ def _validate_seed_worker(words):
         return True, None, str(exc)
 
 
-def _pool_results(worker, tasks, processes):
+def _pool_results(worker, tasks, processes, workgroup_size=1):
     """Yield unordered results and shut workers down cleanly on Ctrl+C."""
     with mp.Pool(processes=processes, initializer=_init_worker) as pool:
         try:
             # Each task is already a sizeable batch, so Pool chunksize stays 1.
-            yield from pool.imap_unordered(worker, tasks, chunksize=1)
+            yield from pool.imap_unordered(worker, tasks, chunksize=workgroup_size)
         except KeyboardInterrupt:
             pool.terminate()
             raise
@@ -371,7 +371,7 @@ def display_addresses(seed_phrase):
         return None
 
 def scan_positions_for_address(seed_words, target_address, wordlist, processes=1,
-                               batch_size=1024):
+                               batch_size=1024, workgroup_size=1):
     if len(seed_words) != SEED_LENGTH:
         print(f"\n✗ Invalid: Seed phrase must contain exactly {SEED_LENGTH} words")
         return []
@@ -396,7 +396,7 @@ def scan_positions_for_address(seed_words, target_address, wordlist, processes=1
         combos = itertools.product(wordlist, repeat=placeholder_count)
         tasks = ((tuple(seed_words), batch, target_address)
                  for batch in _batched(combos, batch_size))
-        for tested, match in _pool_results(_scan_batch_worker, tasks, processes):
+        for tested, match in _pool_results(_scan_batch_worker, tasks, processes, workgroup_size):
             tracker.update(tested)
             if match:
                 matches.append(match)
@@ -413,7 +413,7 @@ def scan_positions_for_address(seed_words, target_address, wordlist, processes=1
         
     return matches
 def search_address_pattern(partial_words, target_pattern, wordlist, processes=1,
-                           batch_size=1024):
+                           batch_size=1024, workgroup_size=1):
     if "?" in partial_words:
         if len(partial_words) != SEED_LENGTH:
             print(f"\n✗ When using ?, enter exactly {SEED_LENGTH} positions")
@@ -440,7 +440,7 @@ def search_address_pattern(partial_words, target_pattern, wordlist, processes=1,
         tasks = ((template_words, batch, target_pattern)
                  for batch in _batched(combos, batch_size))
         for tested, batch_matches in _pool_results(
-                _pattern_batch_worker, tasks, processes):
+                _pattern_batch_worker, tasks, processes, workgroup_size):
             tracker.update(tested)
             for match in batch_matches:
                 valid_phrases.append(match)
@@ -455,7 +455,7 @@ def search_address_pattern(partial_words, target_pattern, wordlist, processes=1,
     return valid_phrases
 
 def find_missing_words(known_words, num_missing, wordlist, processes=1,
-                       batch_size=1024):
+                       batch_size=1024, workgroup_size=1):
     if "?" in known_words:
         if len(known_words) != SEED_LENGTH:
             print(f"\n✗ When using ?, enter exactly {SEED_LENGTH} positions")
@@ -490,7 +490,7 @@ def find_missing_words(known_words, num_missing, wordlist, processes=1,
         tasks = ((template_words, batch)
                  for batch in _batched(combos, batch_size))
         for tested, batch_phrases in _pool_results(
-                _missing_batch_worker, tasks, processes):
+                _missing_batch_worker, tasks, processes, workgroup_size):
             tracker.update(tested)
             for phrase in batch_phrases:
                 valid_phrases.append(phrase)
@@ -667,7 +667,7 @@ def _mode9_batch_worker(task):
 
 
 def search_wrong_words_for_address(seed_words, target_address, wordlist,
-                                   processes=1, batch_size=1024):
+                                   processes=1, batch_size=1024, workgroup_size=1):
     """Try replacements at any one through four positions, in original order."""
     if len(seed_words) != SEED_LENGTH:
         print(f"✗ Enter exactly {SEED_LENGTH} words")
@@ -702,7 +702,7 @@ def search_wrong_words_for_address(seed_words, target_address, wordlist,
         with mp.Pool(processes=processes, initializer=_init_mode9_worker,
                      initargs=(tuple(seed_words), target_account_id, choices)) as pool:
             try:
-                for tested, match in pool.imap_unordered(_mode9_batch_worker, tasks(), chunksize=1):
+                for tested, match in pool.imap_unordered(_mode9_batch_worker, tasks(), chunksize=workgroup_size):
                     tracker.update(tested)
                     if match:
                         match["address"] = target_address
@@ -719,7 +719,7 @@ def search_wrong_words_for_address(seed_words, target_address, wordlist,
 
 
 def search_tokenlist_for_address(filename, target_address, processes=1,
-                                 batch_size=1024):
+                                 batch_size=1024, workgroup_size=1):
     spec = load_position_tokenlist(filename)
     if not spec:
         return []
@@ -779,7 +779,7 @@ def search_tokenlist_for_address(filename, target_address, processes=1,
         ) as pool:
             try:
                 for tested, match in pool.imap_unordered(
-                        _tokenlist_cartesian_batch_worker, tasks, chunksize=1):
+                        _tokenlist_cartesian_batch_worker, tasks, chunksize=workgroup_size):
                     tracker.update(tested)
                     if match:
                         match['address'] = target_address
@@ -910,6 +910,10 @@ def parse_args():
         "--mode8-batch-size", type=int, default=1024,
         help="candidate combinations per Mode 8 task (default: 1024)"
     )
+    parser.add_argument(
+        "--workgroup-size", type=int, default=1,
+        help="multiprocessing tasks grouped per worker dispatch for modes 1-3, 8, and 9 (default: 1)"
+    )
     args = parser.parse_args()
     if args.processes < 1:
         parser.error("--processes must be at least 1")
@@ -917,6 +921,8 @@ def parse_args():
         parser.error("--batch-size must be at least 1")
     if args.mode8_batch_size < 1:
         parser.error("--mode8-batch-size must be at least 1")
+    if args.workgroup_size < 1:
+        parser.error("--workgroup-size must be at least 1")
     return args
 
 
@@ -931,6 +937,7 @@ def main():
     wordlist = tuple(mnemo.wordlist)
     print(f"\n⚙️ Multiprocessing workers: {args.processes}")
     print(f"📦 Candidate batch size: {args.batch_size:,}")
+    print(f"🧩 Multiprocessing workgroup size: {args.workgroup_size:,}")
 
     if mode == "1":
         print(f"\n🔤 Enter {SEED_LENGTH} positions using 1-5 ? placeholders:")
@@ -943,7 +950,8 @@ def main():
         target_address = input().strip()
         
         matches = scan_positions_for_address(
-            seed_words, target_address, wordlist, args.processes, args.batch_size
+            seed_words, target_address, wordlist, args.processes, args.batch_size,
+            args.workgroup_size
         )
         if matches:
             print(f"\nFound {len(matches)} matching combinations!")
@@ -971,7 +979,7 @@ def main():
         
         matches = search_address_pattern(
             partial_words, target_pattern, wordlist, args.processes,
-            args.batch_size
+            args.batch_size, args.workgroup_size
         )
         if matches:
             print(f"\nFound {len(matches)} matching combinations!")
@@ -999,7 +1007,8 @@ def main():
                 return
         
         valid_phrases = find_missing_words(
-            known_words, num_missing, wordlist, args.processes, args.batch_size
+            known_words, num_missing, wordlist, args.processes, args.batch_size,
+            args.workgroup_size
         )
         if valid_phrases:
             print(f"\nFound {len(valid_phrases)} valid combinations!")
@@ -1061,7 +1070,7 @@ def main():
 
         matches = search_tokenlist_for_address(
             tokenlist_filename, target_address, args.processes,
-            args.mode8_batch_size
+            args.mode8_batch_size, args.workgroup_size
         )
         if matches:
             with open("tokenlist_matches.txt", "w") as f:
@@ -1082,7 +1091,8 @@ def main():
         print("🎯 Enter target XRP classic address:")
         target_address = input().strip()
         matches = search_wrong_words_for_address(
-            seed_words, target_address, wordlist, args.processes, args.batch_size
+            seed_words, target_address, wordlist, args.processes, args.batch_size,
+            args.workgroup_size
         )
         if matches:
             match = matches[0]
