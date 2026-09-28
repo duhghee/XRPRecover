@@ -935,9 +935,14 @@ def main():
     mode = input("\n📎 Enter mode number (1-9): ").strip()
     mnemo = Mnemonic("english")
     wordlist = tuple(mnemo.wordlist)
-    print(f"\n⚙️ Multiprocessing workers: {args.processes}")
-    print(f"📦 Candidate batch size: {args.batch_size:,}")
-    print(f"🧩 Multiprocessing workgroup size: {args.workgroup_size:,}")
+    # Show only the performance settings relevant to the selected mode.
+    if mode in {"1", "2", "3", "8", "9"}:
+        print(f"\n⚙️ Multiprocessing workers: {args.processes}")
+        print(f"🧩 Multiprocessing workgroup size: {args.workgroup_size:,}")
+        if mode == "8":
+            print(f"⚡ Mode 8 batch size: {args.mode8_batch_size:,}")
+        else:
+            print(f"📦 Candidate batch size: {args.batch_size:,}")
 
     if mode == "1":
         print(f"\n🔤 Enter {SEED_LENGTH} positions using 1-5 ? placeholders:")
@@ -1062,7 +1067,6 @@ def main():
         generate_new_seed()
 
     elif mode == "8":
-        print(f"⚡ Mode 8 optimized batch size: {args.mode8_batch_size:,}")
         print("\n📄 Enter tokenlist filename [tokenlist.txt]:")
         tokenlist_filename = input().strip() or "tokenlist.txt"
         print("🎯 Enter target XRP classic address:")
