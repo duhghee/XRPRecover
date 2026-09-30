@@ -13,7 +13,7 @@ The program provides local tools for these 12-word BIP-39 operations:
 3. Replace 1-5 missing words represented as "?" and print only valid BIP-39 12 word seed phrases compatible with XRP addresses as "missing_words.txt".
 4. Validate a 12 word seed phrase and derive its XRP address.
 5. Display the XRP address for a valid 12 word seed phrase.
-6. Permute 12 supplied words and print only the valid BIP-39 phrases derived using the derivation path "m/44'/144'/0'/0/0". Saved to 'descrambled.txt'
+6. Permute 12 supplied words and match a provided address using only the valid BIP-39 phrases derived from the derivation path "m/44'/144'/0'/0/0". Saved to 'descrambled.txt'
 7. Generate a new seed phrase and address.
 8. Search a fixed-position and/or an unanchored tokenlist.txt for a target address.
 9. Automatically tests 1-4 possible incorrect words in any position against a target "r" address. 
