@@ -8,15 +8,15 @@ A multiprocessing open-source Python utility for recovering and validating 12-wo
 
 The program provides local tools for these 12-word BIP-39 operations:
 
-1. Testing replacement words in selected positions by replaceing 1–5 positions marked `?` and match an XRP classic address.
-2. Search for XRP addresses ending with a specific pattern. Such as the last six of a target "r" address. 
-3. Replace 1-5 missing words represented as "?" and print only valid BIP-39 12 word seed phrases compatible with XRP addresses as "missing_words.txt".
-4. Validate a 12 word seed phrase and derive its XRP address.
-5. Display the XRP address for a valid 12 word seed phrase.
-6. Permute 12 supplied words and match a provided address using only the valid BIP-39 phrases derived from the derivation path "m/44'/144'/0'/0/0". Saved to 'descrambled.txt'
-7. Generate a new seed phrase and address.
-8. Search a fixed-position and/or an unanchored tokenlist.txt for a target address.
-9. Automatically tests 1-4 possible incorrect words in any position against a target "r" address. 
+1. Testing replacement words in selected positions by replaceing 1–5 positions marked `?` and match an XRP classic address. Use case is when the address and at least 8 words and their positions are known.
+2. Search for XRP addresses ending with a specific pattern. Such as the last six of a target "r" address. Use case is similar to mode 1. The difference is when only partial address is known. 
+3. Replace 1-5 missing words represented as "?" and print only valid BIP-39 12 word seed phrases compatible with XRP addresses as "missing_words.txt". Use case is when we want to save all possible valid 12 word mnemonic seed phrases to a .txt file for further processing.
+4. Validate a 12 word seed phrase and derive its XRP address with the derivation path "m/44'/144'/0'/0/0".
+5. Display the XRP address for a valid 12 word seed phrase. 
+6. Permute 12 supplied words and match a provided address using only the valid BIP-39 phrases derived from the derivation path "m/44'/144'/0'/0/0". Saved to 'descrambled.txt'. Use when all 12 words are correct but in the wrong positions. A known address is needed.
+7. Generate a new valid 12 word seed phrase and address using derivation path "m/44'/144'/0'/0/0".
+8. Search a fixed-position and/or an unanchored tokenlist.txt for a target address. Uses a btcrecover compatible tokenlist.txt to search for a target address.
+9. Automatically tests 1-4 possible incorrect words in any position against a target "r" address. Use case is when at least 8 words are correct but are unsure of their correct position.
 
 These operations may be computationally intensive. Use reasonable process and batch settings, and monitor system temperature, memory usage, and power consumption. Address derivation uses `m/44'/144'/0'/0/0`. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in one process. The terminal shows progress, speed and ETA. Four unknown wrong words in mode 9 can require an impractically long exhaustive search as well as 5 missing in mode 1.
 
