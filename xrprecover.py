@@ -31,7 +31,7 @@ This script provides various functionalities to work with XRP seed phrases, incl
 6. Unscramble 12 words against a target XRP address
 7. Generate new seed phrases
 8. Search positional tokenlist for target address
-9. Replace 1-4 incorrect words at unknown positions 
+9. Replace 1–4 incorrect words at any positions 
 Classes:
     ProgressTracker: Tracks and displays the progress of long-running operations.
 Functions:
@@ -411,12 +411,33 @@ def scan_positions_for_address(seed_words, target_address, wordlist, processes=1
         print("\nSearch interrupted by user")
         
     return matches
-def _wrong_words_batch_worker(task):
-    seed_words, candidates, target_account_id, target_address = task
-    for positions, replacements in candidates:
-        words = list(seed_words)
-        for position, replacement in zip(positions, replacements):
-            words[position] = replacement
+_MODE9_SEED = None
+_MODE9_CHOICES = None
+_MODE9_BLOCKS = None
+_MODE9_TARGET = None
+
+
+def _init_mode9_worker(seed_words, choices, blocks, target_account_id):
+    """Install immutable search data once, including under Windows spawn."""
+    global _MODE9_SEED, _MODE9_CHOICES, _MODE9_BLOCKS, _MODE9_TARGET
+    _init_worker()
+    _MODE9_SEED = seed_words
+    _MODE9_CHOICES = choices
+    _MODE9_BLOCKS = blocks
+    _MODE9_TARGET = target_account_id
+
+
+def _mode9_cartesian_batch_worker(task):
+    """Decode a numeric Cartesian range locally; no candidate IPC."""
+    block_index, start, stop = task
+    positions = _MODE9_BLOCKS[block_index]
+    lists = tuple(_MODE9_CHOICES[position] for position in positions)
+    words = list(_MODE9_SEED)
+    for tested, candidate_index in enumerate(range(start, stop), 1):
+        remainder = candidate_index
+        for position, choices in zip(reversed(positions), reversed(lists)):
+            remainder, digit = divmod(remainder, len(choices))
+            words[position] = choices[digit]
         if not _is_valid_12_word_checksum(words):
             continue
         phrase = " ".join(words)
@@ -424,126 +445,89 @@ def _wrong_words_batch_worker(task):
             account_id = _mode8_account_id(phrase)
         except (ValueError, OverflowError):
             continue
-        if account_id == target_account_id:
-            changes = [
-                {
-                    'position': position + 1,
-                    'original': seed_words[position],
-                    'replacement': replacement,
-                }
-                for position, replacement in zip(positions, replacements)
-            ]
-            return len(candidates), {
-                'changes': changes,
-                'phrase': phrase,
-                'address': target_address,
-            }
-    return len(candidates), None
+        if account_id == _MODE9_TARGET:
+            changes = [(position + 1, _MODE9_SEED[position], words[position])
+                       for position in positions]
+            match = {'changes': changes, 'phrase': phrase}
+            # Preserve the previous single-word result fields for callers.
+            if len(changes) == 1:
+                match.update(position=changes[0][0], original=changes[0][1],
+                             replacement=changes[0][2])
+            return tested, match
+    return stop - start, None
 
 
-def scan_wrong_word_positions(seed_words, target_address, wordlist, num_wrong,
-                              processes=1, batch_size=1024):
-    """Replace exactly 1-4 incorrect words at unknown positions.
+def scan_single_word_positions(seed_words, target_address, wordlist,
+                               processes=1, batch_size=1024, wrong_words=1):
+    """Replace exactly 1–4 words with positions fixed, stopping on a match.
 
-    Word positions stay fixed. Mode 9 chooses ``num_wrong`` positions and tries
-    every BIP-39 replacement combination for those positions, stopping as soon
-    as the supplied XRP classic address is found.
+    Invalid words and ? must be among the replaced positions. Each selected
+    position excludes its original word, so candidates have exactly the
+    requested number of changes. Only compact numeric ranges cross processes.
     """
     if len(seed_words) != SEED_LENGTH:
         print(f"\n✗ Seed phrase must contain exactly {SEED_LENGTH} words")
         return []
-    if not 1 <= num_wrong <= 4:
-        print("\n✗ Mode 9 requires a wrong-word count from 1 to 4")
-        return []
     if processes < 1 or batch_size < 1:
         raise ValueError("Processes and batch size must be at least 1")
-
-    wordlist = tuple(wordlist)
+    if wrong_words not in range(1, 5):
+        raise ValueError("Wrong-word count must be between 1 and 4")
+    seed_words = tuple(seed_words)
+    wordlist = tuple(dict.fromkeys(wordlist))
     vocabulary = set(wordlist)
-    unknown_positions = tuple(
-        position for position, word in enumerate(seed_words)
-        if word not in vocabulary
-    )
-    if len(unknown_positions) > num_wrong:
-        print(
-            f"\n✗ Input contains {len(unknown_positions)} non-BIP-39/unknown "
-            f"position(s), but Mode 9 was told to repair {num_wrong}."
-        )
+    required = {i for i, word in enumerate(seed_words) if word not in vocabulary}
+    if len(required) > wrong_words:
+        print("\n✗ The wrong-word count must include every ? or invalid word.")
         return []
-
     try:
         target_account_id = _decode_xrp_account_id(target_address)
     except ValueError as exc:
         print(f"\n✗ Invalid XRP classic address: {exc}")
         return []
-
-    selectable_positions = tuple(
-        position for position in range(SEED_LENGTH)
-        if position not in unknown_positions
-    )
-    additional_positions = num_wrong - len(unknown_positions)
-    position_sets = (
-        tuple(sorted(unknown_positions + extra))
-        for extra in itertools.combinations(selectable_positions, additional_positions)
-    )
-
-    def replacement_lists(positions):
-        return tuple(
-            wordlist if seed_words[position] not in vocabulary
-            else tuple(word for word in wordlist if word != seed_words[position])
-            for position in positions
-        )
-
-    total = 0
-    for extra in itertools.combinations(selectable_positions, additional_positions):
-        positions = tuple(sorted(unknown_positions + extra))
-        choices = 1
-        for replacements in replacement_lists(positions):
-            choices *= len(replacements)
-        total += choices
-
-    tracker = ProgressTracker(f"Mode 9 ({num_wrong} Wrong Words)", total)
-    print(f"\nScanning for exactly {num_wrong} incorrect word(s) against: {target_address}")
-    print("Word positions remain fixed; only selected words are replaced.")
-    if unknown_positions:
-        print("Forced unknown position(s): " + ", ".join(str(p + 1) for p in unknown_positions))
+    choices = tuple(tuple(word for word in wordlist if word != original)
+                    for original in seed_words)
+    blocks = tuple(positions for positions in
+                   itertools.combinations(range(SEED_LENGTH), wrong_words)
+                   if required.issubset(positions))
+    sizes = tuple(math.prod(len(choices[p]) for p in positions)
+                  for positions in blocks)
+    total = sum(sizes)
+    print(f"\nScanning against XRP address: {target_address}")
+    print(f"Replacing exactly {wrong_words} word(s); positions stay fixed.")
     print(f"Candidate space: {total:,}")
-    if num_wrong >= 3:
-        print("⚠️ This search space is extremely large and may be impractical on CPU.")
+    print(f"Mode 9 range batch size: {batch_size:,}")
+    if wrong_words >= 3:
+        print("⚠️ This search space is extremely large and may be impractical.")
     print("Press Ctrl+C to stop scanning at any time\n")
-
-    def candidate_iter():
-        for positions in position_sets:
-            lists = replacement_lists(positions)
-            for replacements in itertools.product(*lists):
-                yield positions, replacements
-
-    tasks = (
-        (tuple(seed_words), batch, target_account_id, target_address)
-        for batch in _batched(candidate_iter(), batch_size)
-    )
+    tracker = ProgressTracker("Wrong Word Position Scanner", total)
     matches = []
-    results = _pool_results(_wrong_words_batch_worker, tasks, processes)
+    tasks = ((block, start, min(start + batch_size, size))
+             for block, size in enumerate(sizes)
+             for start in range(0, size, batch_size))
     try:
-        for tested, match in results:
-            tracker.update(tested)
-            if match:
-                matches.append(match)
-                print("\n✓ Found target XRP address match!")
-                for change in match['changes']:
-                    print(
-                        f"Position {change['position']}: "
-                        f"{change['original']} -> {change['replacement']}"
-                    )
-                print(f"Seed: {match['phrase']}\n")
-                break
-        if not matches:
-            tracker.finish()
+        with mp.Pool(processes=processes, initializer=_init_mode9_worker,
+                     initargs=(seed_words, choices, blocks, target_account_id)) as pool:
+            try:
+                for tested, match in pool.imap_unordered(
+                        _mode9_cartesian_batch_worker, tasks, chunksize=1):
+                    tracker.update(tested)
+                    if match:
+                        match['address'] = target_address
+                        matches.append(match)
+                        print("\n✓ Found target address match!")
+                        for position, original, replacement in match['changes']:
+                            print(f"Position {position}: {original} -> {replacement}")
+                        print(f"Seed: {match['phrase']}\n")
+                        pool.terminate()
+                        break
+            except KeyboardInterrupt:
+                pool.terminate()
+                raise
+        tracker.finish()
     except KeyboardInterrupt:
-        print("\nSearch interrupted by user")
-    finally:
-        results.close()
+        print("\nSearch interrupted by user; keeping matches found so far.")
     return matches
+
 
 def search_address_pattern(partial_words, target_pattern, wordlist, processes=1,
                            batch_size=1024):
@@ -947,7 +931,7 @@ def print_menu():
     [6] 🔀 Descramble 12 words for a target XRP address
     [7] ✨ Generate new seed
     [8] 📄 Search fixed position tokenlist for XRP address
-    [9] 🔎 Scan for 1-4 incorrect words at unknown positions
+    [9] 🔎 Repair 1–4 incorrect words at fixed positions
     """
     print(menu)
 
@@ -1172,36 +1156,33 @@ def main():
             print("\nNo matching combinations found")
     elif mode == "9":
         print(f"\n🔤 Enter exactly {SEED_LENGTH} words in their believed positions:")
-        print("Mode 9 can repair exactly 1, 2, 3, or 4 wrong words.")
-        print("Use ? for any position whose word is completely unknown.")
+        print("Mode 9 replaces 1–4 wrong words without rearranging positions.")
+        print("Use ? for unknown words; include them in the wrong-word count.")
         seed_words = input().strip().lower().split()
         if len(seed_words) != SEED_LENGTH:
             print(f"\n⚠️ Please provide exactly {SEED_LENGTH} words.")
             return
-        try:
-            num_wrong = int(input("🔢 How many words are wrong (1-4)? ").strip())
-        except ValueError:
-            print("\n✗ Wrong-word count must be a whole number from 1 to 4.")
-            return
-        if not 1 <= num_wrong <= 4:
-            print("\n✗ Wrong-word count must be from 1 to 4.")
-            return
         print("🎯 Enter target XRP classic address:")
         target_address = input().strip()
-        matches = scan_wrong_word_positions(
-            seed_words, target_address, wordlist, num_wrong,
-            args.processes, args.batch_size
+        try:
+            wrong_words = int(input("How many words are wrong (1–4)? ").strip())
+            if wrong_words not in range(1, 5):
+                raise ValueError
+        except ValueError:
+            print("Please enter a number from 1 to 4.")
+            return
+        matches = scan_single_word_positions(
+            seed_words, target_address, wordlist, args.processes, args.batch_size,
+            wrong_words=wrong_words
         )
         if matches:
             with open("mode9_position_matches.txt", "w", encoding="utf-8") as f:
                 for i, match in enumerate(matches, 1):
-                    changes = "\n".join(
-                        f"Position {change['position']}: "
-                        f"{change['original']} -> {change['replacement']}"
-                        for change in match['changes']
-                    )
                     output = (
-                        f"Match {i}:\n{changes}\n"
+                        f"Match {i}:\n"
+                        + "".join(f"Position {p}: {old} -> {new}\n"
+                                  for p, old, new in match['changes'])
+                        +
                         f"XRP address: {match['address']}\n"
                         f"Seed phrase:\n{match['phrase']}\n"
                     )
@@ -1216,3 +1197,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
