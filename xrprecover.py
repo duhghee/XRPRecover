@@ -23,15 +23,15 @@ import math
 """
 Advanced 12-Word Seed Recovery Tool
 This script provides various functionalities to work with XRP seed phrases, including:
-1. Scanning positions for address match
+1. Scan positions for address match
 2. Searching by address pattern
 3. Finding missing words
-4. Validating seed phrases
-5. Displaying addresses
-6. Descrambling 12 words against a target XRP address
-7. Generating new seed phrases
-8. Searching position tokenlists
-9. Replacing one incorrect word at any position (seedy Mode 1 behavior)
+4. Validate seed phrases
+5. Display address
+6. Unscramble 12 words against a target XRP address
+7. Generate new seed phrases
+8. Search positional tokenlist for target address
+9. Replace one incorrect word at any position 
 Classes:
     ProgressTracker: Tracks and displays the progress of long-running operations.
 Functions:
