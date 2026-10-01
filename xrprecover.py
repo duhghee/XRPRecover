@@ -28,7 +28,10 @@ This script provides various functionalities to work with XRP seed phrases, incl
 3. Finding missing words
 4. Validating seed phrases
 5. Displaying addresses
-6. Descrambling seed phrases
+6. Descrambling 12 words against a target XRP address
+7. Generating new seed phrases
+8. Searching position tokenlists
+9. Replacing one incorrect word at any position (seedy Mode 1 behavior)
 Classes:
     ProgressTracker: Tracks and displays the progress of long-running operations.
 Functions:
@@ -44,8 +47,8 @@ Functions:
         Searches for seed phrases that generate XRP addresses ending with the target pattern.
     find_missing_words(known_words: list, num_missing: int, wordlist: set) -> list:
         Finds valid seed phrases by filling in the missing words from the known words dictionary.
-    descramble_seed(scrambled_words: list, wordlist: set) -> list:
-        Finds valid seed phrases by testing permutations of the scrambled words.
+    descramble_seed(scrambled_words: list, target_address: str, wordlist: set) -> list:
+        Finds the word ordering matching the target XRP classic address.
     main():
         Entry point of the script. Provides a menu for the user to select the desired functionality.
 """
@@ -408,6 +411,79 @@ def scan_positions_for_address(seed_words, target_address, wordlist, processes=1
         print("\nSearch interrupted by user")
         
     return matches
+def _single_word_batch_worker(task):
+    seed_words, candidates, target_account_id, target_address = task
+    matches = []
+    for position, replacement in candidates:
+        words = list(seed_words)
+        words[position] = replacement
+        if not _is_valid_12_word_checksum(words):
+            continue
+        phrase = " ".join(words)
+        if _mode8_account_id(phrase) == target_account_id:
+            matches.append({
+                'position': position + 1,
+                'original': seed_words[position],
+                'replacement': replacement,
+                'phrase': phrase,
+                'address': target_address,
+            })
+    return len(candidates), matches
+
+
+def scan_single_word_positions(seed_words, target_address, wordlist,
+                               processes=1, batch_size=1024):
+    """Seedy Mode 1 behavior: replace one word at a time, collecting all matches.
+
+    Every other position stays fixed. The unchanged input is skipped, as in
+    seedy.py. This recovers one incorrect word at an unknown position, or a
+    single ? at a known position; it does not replace multiple words together.
+    """
+    if len(seed_words) != SEED_LENGTH:
+        print(f"\n✗ Seed phrase must contain exactly {SEED_LENGTH} words")
+        return []
+    if processes < 1 or batch_size < 1:
+        raise ValueError("Processes and batch size must be at least 1")
+    wordlist = tuple(wordlist)
+    vocabulary = set(wordlist)
+    invalid = [word for word in seed_words if word not in vocabulary]
+    if len(invalid) > 1:
+        print("\n✗ Mode 9 can repair only one word. More than one position "
+              "contains a non-BIP-39 word or ?. Use Mode 1 for multiple ? positions.")
+        return []
+    try:
+        target_account_id = _decode_xrp_account_id(target_address)
+    except ValueError as exc:
+        print(f"\n✗ Invalid XRP classic address: {exc}")
+        return []
+    total = sum(sum(word != original for word in wordlist)
+                for original in seed_words)
+    tracker = ProgressTracker("Single Word Position Scanner", total)
+    matches = []
+    print(f"\nScanning each position against XRP address: {target_address}")
+    print("Replacing exactly one word per candidate; all other words stay fixed.")
+    print(f"Candidate space: {total:,}")
+    print("Press Ctrl+C to stop scanning at any time\n")
+    candidates = ((position, word)
+                  for position, original in enumerate(seed_words)
+                  for word in wordlist if word != original)
+    tasks = ((tuple(seed_words), batch, target_account_id, target_address)
+             for batch in _batched(candidates, batch_size))
+    try:
+        for tested, batch_matches in _pool_results(
+                _single_word_batch_worker, tasks, processes):
+            tracker.update(tested)
+            for match in batch_matches:
+                matches.append(match)
+                print(f"\n✓ Found match at position {match['position']}!")
+                print(f"Original: {match['original']} -> New: {match['replacement']}")
+                print(f"Seed: {match['phrase']}\n")
+        tracker.finish()
+    except KeyboardInterrupt:
+        print("\nSearch interrupted by user; keeping matches found so far.")
+    return sorted(matches, key=lambda match: (match['position'], match['replacement']))
+
+
 def search_address_pattern(partial_words, target_pattern, wordlist, processes=1,
                            batch_size=1024):
     if "?" in partial_words:
@@ -718,27 +794,76 @@ def search_tokenlist_for_address(filename, target_address, processes=1,
 
     return matches
 
-def descramble_seed(scrambled_words, wordlist):
+def _unique_word_orders(words):
+    """Yield distinct permutations in lexical order without storing them."""
+    words = sorted(words)
+    yield tuple(words)
+    while True:
+        i = len(words) - 2
+        while i >= 0 and words[i] >= words[i + 1]:
+            i -= 1
+        if i < 0:
+            return
+        j = len(words) - 1
+        while words[j] <= words[i]:
+            j -= 1
+        words[i], words[j] = words[j], words[i]
+        words[i + 1:] = reversed(words[i + 1:])
+        yield tuple(words)
+
+
+def _descramble_batch_worker(task):
+    candidates, target_account_id = task
+    for tested, words in enumerate(candidates, 1):
+        if not _is_valid_12_word_checksum(words):
+            continue
+        phrase = " ".join(words)
+        if _mode8_account_id(phrase) == target_account_id:
+            return tested, phrase
+    return len(candidates), None
+
+
+def descramble_seed(scrambled_words, target_address, wordlist,
+                    processes=1, batch_size=1024):
+    """Find the ordering of 12 supplied words matching a target XRP address."""
     if len(scrambled_words) != SEED_LENGTH:
-        print(f"\n✗ Invalid: Seed phrase must contain exactly {SEED_LENGTH} words")
+        print(f"\n✗ Enter exactly {SEED_LENGTH} scrambled words")
         return []
-    
-    tracker = ProgressTracker("Descrambling")
-    valid_phrases = []
-    mnemo = Mnemonic("english")
-    
-    print(f"Testing permutations of {len(scrambled_words)} words...")
-    
+    vocabulary = set(wordlist)
+    invalid = sorted(set(scrambled_words) - vocabulary)
+    if invalid:
+        print("\n✗ All words must be BIP-39 words; no ? placeholders. Invalid: "
+              + ", ".join(invalid))
+        return []
+    if processes < 1 or batch_size < 1:
+        raise ValueError("Processes and batch size must be at least 1")
     try:
-        for perm in itertools.permutations(scrambled_words):
-            phrase = " ".join(perm)
-            if mnemo.check(phrase):
-                valid_phrases.append(phrase)
-                print(f"\nFound valid phrase: {phrase}")
-            tracker.update()
+        target_account_id = _decode_xrp_account_id(target_address)
+    except ValueError as exc:
+        print(f"\n✗ Invalid XRP classic address: {exc}")
+        return []
+    total = math.factorial(SEED_LENGTH)
+    for word in set(scrambled_words):
+        total //= math.factorial(scrambled_words.count(word))
+    tracker = ProgressTracker("XRP Descrambling", total)
+    print(f"\nTesting {total:,} distinct word orders against {target_address}")
+    print("Press Ctrl+C to stop searching at any time\n")
+    tasks = ((batch, target_account_id)
+             for batch in _batched(_unique_word_orders(scrambled_words), batch_size))
+    results = _pool_results(_descramble_batch_worker, tasks, processes)
+    try:
+        for tested, phrase in results:
+            tracker.update(tested)
+            if phrase:
+                print(f"\n✓ Found target XRP address match!\nSeed: {phrase}")
+                return [phrase]
+        tracker.finish()
     except KeyboardInterrupt:
         print("\nSearch interrupted by user")
-    return valid_phrases
+    finally:
+        # Closing the generator exits the Pool context and terminates pending work.
+        results.close()
+    return []
 
 def print_banner():
     banner = """
@@ -758,9 +883,10 @@ def print_menu():
     [3] 🧩 Find missing words
     [4] ✓ Validate seed phrase
     [5] 📋 Display addresses
-    [6] 🔀 Descramble seed
+    [6] 🔀 Descramble 12 words for a target XRP address
     [7] ✨ Generate new seed
     [8] 📄 Search fixed position tokenlist for XRP address
+    [9] 🔎 Scan for one incorrect word at any position (seedy Mode 1)
     """
     print(menu)
 
@@ -794,11 +920,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="12-word XRP seed recovery tool")
     parser.add_argument(
         "--processes", "-p", type=int, default=max(1, os.cpu_count() or 1),
-        help="worker processes for modes 1-4 and 8 (default: all logical CPU cores)"
+        help="worker processes for modes 1-4, 6, 8 and 9 (default: all logical CPU cores)"
     )
     parser.add_argument(
         "--batch-size", type=int, default=1024,
-        help="candidate combinations per multiprocessing task for modes 1-4 (default: 1024)"
+        help="candidate combinations per multiprocessing task for modes 1-4, 6 and 9 (default: 1024)"
     )
     parser.add_argument(
         "--mode8-batch-size", type=int, default=1024,
@@ -820,7 +946,7 @@ def main():
     print_banner()
     print_menu()
     
-    mode = input("\n📎 Enter mode number (1-8): ").strip()
+    mode = input("\n📎 Enter mode number (1-9): ").strip()
     mnemo = Mnemonic("english")
     wordlist = tuple(mnemo.wordlist)
     print(f"\n⚙️ Multiprocessing workers: {args.processes}")
@@ -942,17 +1068,20 @@ def main():
             print(f"\n⚠️ Input contains {len(scrambled)} words. Please provide exactly {SEED_LENGTH} words.")
             return
         
-        valid_phrases = descramble_seed(scrambled, wordlist)
-        if valid_phrases:
-            print(f"\nFound {len(valid_phrases)} valid combinations!")
-            with open('descrambled.txt', 'w') as f:
-                for i, phrase in enumerate(valid_phrases, 1):
-                    output = f"\nOption {i}:\n{phrase}"
-                    print(output)
-                    f.write(output + "\n")
-            print("\nResults saved to 'descrambled.txt'")
+        print("🎯 Enter target XRP classic address:")
+        target_address = input().strip()
+        matches = descramble_seed(
+            scrambled, target_address, wordlist, args.processes, args.batch_size
+        )
+        if matches:
+            output = (f"XRP address: {target_address}\n"
+                      f"Seed phrase:\n{matches[0]}\n")
+            with open('descrambled.txt', 'w', encoding='utf-8') as f:
+                f.write(output)
+            print("\n" + output)
+            print("Results saved to 'descrambled.txt'")
         else:
-            print("\nNo valid combinations found")
+            print("\nNo matching seed phrase found")
 
     elif mode == "7":
         generate_new_seed()
@@ -978,6 +1107,34 @@ def main():
                     print("\n" + output)
                     f.write(output + "\n")
             print("Results saved to 'tokenlist_matches.txt'")
+        else:
+            print("\nNo matching combinations found")
+    elif mode == "9":
+        print(f"\n🔤 Enter exactly {SEED_LENGTH} words in their believed positions:")
+        print("Mode 9 tries changing one word at a time at every position.")
+        print("You may use a single ? if that word is unknown.")
+        seed_words = input().strip().lower().split()
+        if len(seed_words) != SEED_LENGTH:
+            print(f"\n⚠️ Please provide exactly {SEED_LENGTH} words.")
+            return
+        print("🎯 Enter target XRP classic address:")
+        target_address = input().strip()
+        matches = scan_single_word_positions(
+            seed_words, target_address, wordlist, args.processes, args.batch_size
+        )
+        if matches:
+            with open("mode9_position_matches.txt", "w", encoding="utf-8") as f:
+                for i, match in enumerate(matches, 1):
+                    output = (
+                        f"Match {i}:\n"
+                        f"Position {match['position']}: "
+                        f"{match['original']} -> {match['replacement']}\n"
+                        f"XRP address: {match['address']}\n"
+                        f"Seed phrase:\n{match['phrase']}\n"
+                    )
+                    print("\n" + output)
+                    f.write(output + "\n")
+            print("Results saved to 'mode9_position_matches.txt'")
         else:
             print("\nNo matching combinations found")
     else:
