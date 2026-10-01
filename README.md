@@ -29,17 +29,16 @@ The program provides local tools for these BIP-39 12 word mnemonic seed phrase o
 #LIMITATIONS
 
 1. 12 word seed phrases only.
-2. Path m/44'/144'/0'/0/0" only.
+2. `m/44'/144'/0'/0/0` only.
 3. CPU only
-4. These operations may be computationally intensive. Use reasonable process and batch settings, and monitor system temperature, memory usage, and power consumption.
-5. Address derivation uses `m/44'/144'/0'/0/0`.
-6. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in a single process. # 7. The terminal shows progress, speed and ETA. 
-8. Four unknown wrong words in mode 9 can require an impractically long exhaustive search as well as 5 missing in mode 1.
+4. These operations are computationally intensive. The highest logical core count and highest base/boost clock speed that can be afforded. See benchmarks.md
+5. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in a single process.  6. The terminal shows progress, speed and ETA. Mode 6 does not.
+7. Four unknown wrong words in mode 9 can require an impractically long exhaustive search as well as 5 missing in mode 1.
 
-## Requirements
+## Requirements ##
 
 - Linux, Windows, or macOS
-- Python 3.12 (3.13 has issues)
+- Python 3.12.10 (3.13 has issues)
 - A 64-bit Python installation
 - Required Python packages used by the script
 
@@ -51,7 +50,7 @@ python3 --version
 
 It is recommended to use a Python virtual environment.
 
-## Installation
+## Installation ##
 
 Clone the repository:
 
@@ -79,7 +78,7 @@ Install the dependencies:
 python3 -m pip install -r requirements.txt
 ```
 
-## Running the Program
+## Running the Program ##
 
 Display command-line options:
 
@@ -111,7 +110,7 @@ Only use an option if it appears in the output of:
 python3 xrprecover.py --help
 ```
 
-## CPU Tuning
+## CPU Tuning ##
 
 A reasonable starting point is:
 
@@ -123,7 +122,7 @@ Increase the process count gradually while monitoring CPU temperature, memory us
 
 The best setting is the one that produces the highest sustained search speed—not necessarily the largest process count.
 
-## Missing Words
+## Missing Words ##
 
 Enter a question mark (?) at each unknown position when supported by the selected mode.
 
@@ -133,22 +132,20 @@ Example:
 word1 word2 ? word4 word5 ? word7 word8 word9 word10 word11 word12
 ```
 
-Mode 1 replaces only marked positions. Mode 9 takes twelve supplied BIP-39 words and tests which 1-4 words may be wrong; it does not use `?`.
+Mode 1 replaces only marked positions. Mode 9 tests twelve supplied BIP39 words and determines which 1-4 words may be wrong; it does not use `?`.
 
-## Token Lists
+## Token Lists ##
 
-Token-list mode uses candidate groups assigned to seed positions. Unanchored positions should exchange candidates only with other unanchored positions.
-
-Do not publish a token list containing a genuine or partially reconstructed seed phrase.
+Token-list mode uses candidate groups assigned to seed positions. Unanchored positions should exchange candidates only with other unanchored positions. I recommend duhghee/BTCRecover-Tokenlist-Creator
 
 
 # Acknowledgements
 
-***   https://github.com/gurnec/btcrecover   ***
+***  gurnec/btcrecover  ***
 
-***   https://github.com/3rdIteration/btcrecover   ***
+***  3rdIteration/btcrecover  ***
 
-***   https://github.com/d31337m3/seedy/  ***
+***  d31337m3/seedy  ***
 
 
 
