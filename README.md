@@ -6,30 +6,40 @@ A multiprocessing open-source Python utility for recovering and validating 12-wo
 
 ## Features
 
-The program provides local tools for these 12-word BIP-39 operations:
+The program provides local tools for these BIP-39 12 word mnemonic seed phrase operations:
 
 1. Testing replacement words in selected positions by replaceing 1–5 positions marked `?` and match an XRP classic address. Use case is when the address and at least 7 words and their positions are known.
-2. Search for XRP addresses ending with a specific pattern. Such as the last six of a target "r" address. Use case is similar to mode 1. The difference is when only partial address is known. 
+
+2. Search for XRP addresses ending with a specific pattern. Such as the last six of a target "r" address. Use case is similar to mode 1. The difference is when only partial address is known.
+
 3. Replace 1-5 missing words represented as "?" and print only valid BIP-39 12 word seed phrases compatible with XRP addresses as "missing_words.txt". Use case is when we want to save all possible valid 12 word mnemonic seed phrases to a .txt file for further processing.
+
 4. Validate a 12 word seed phrase and derive its XRP address with the derivation path "m/44'/144'/0'/0/0".
+
 5. Display the XRP address for a valid 12 word seed phrase. 
+
 6. Permute 12 supplied words and match a provided address using only the valid BIP-39 phrases derived from the derivation path "m/44'/144'/0'/0/0". Saved to 'descrambled.txt'. Use when all 12 words are correct but in the wrong positions. A known address is needed.
+
 7. Generate a new valid 12 word seed phrase and address using derivation path "m/44'/144'/0'/0/0".
+
 8. Search a fixed-position and/or an unanchored tokenlist.txt for a target address. Uses a btcrecover compatible tokenlist.txt to search for a target address.
+
 9. Automatically tests 1-4 possible incorrect words in any position against a target "r" address. Use case is when at least 8 words are correct but are unsure of their correct position.
 
-LIMITATIONS
+#LIMITATIONS
 
 1. 12 word seed phrases only.
 2. Path m/44'/144'/0'/0/0" only.
 3. CPU only
-
-These operations may be computationally intensive. Use reasonable process and batch settings, and monitor system temperature, memory usage, and power consumption. Address derivation uses `m/44'/144'/0'/0/0`. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in one process. The terminal shows progress, speed and ETA. Four unknown wrong words in mode 9 can require an impractically long exhaustive search as well as 5 missing in mode 1.
+4. These operations may be computationally intensive. Use reasonable process and batch settings, and monitor system temperature, memory usage, and power consumption.
+5. Address derivation uses `m/44'/144'/0'/0/0`.
+6. Modes 1–4, 8, and 9 use multiprocessing; mode 6 scans permutations in a single process. # 7. The terminal shows progress, speed and ETA. 
+8. Four unknown wrong words in mode 9 can require an impractically long exhaustive search as well as 5 missing in mode 1.
 
 ## Requirements
 
 - Linux, Windows, or macOS
-- Python 3
+- Python 3.12 (3.13 has issues)
 - A 64-bit Python installation
 - Required Python packages used by the script
 
