@@ -213,6 +213,22 @@ def _mode8_account_id(phrase):
     return hashlib.new("ripemd160", hashlib.sha256(public_key).digest()).digest()
 
 
+def _encode_xrp_account_id(account_id):
+    """Encode a 20-byte account ID as an XRP classic Base58Check address."""
+    if len(account_id) != 20:
+        raise ValueError("XRP account ID must be 20 bytes")
+    payload = b"\x00" + account_id
+    checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    raw = payload + checksum
+    number = int.from_bytes(raw, "big")
+    characters = []
+    while number:
+        number, remainder = divmod(number, 58)
+        characters.append(_XRP_BASE58_ALPHABET[remainder])
+    leading_zeroes = len(raw) - len(raw.lstrip(b"\x00"))
+    return _XRP_BASE58_ALPHABET[0] * leading_zeroes + "".join(reversed(characters))
+
+
 def _decode_xrp_account_id(address):
     """Validate a classic XRP address and return its 20-byte account ID."""
     number = 0
@@ -295,7 +311,7 @@ def _pattern_batch_worker(task):
             continue
         phrase = " ".join(completed_words)
         try:
-            address = derive_xrp_address(phrase)
+            address = _encode_xrp_account_id(_mode8_account_id(phrase))
         except Exception:
             continue
         if address.endswith(target_pattern):
