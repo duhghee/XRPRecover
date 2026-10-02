@@ -38,7 +38,7 @@ Functions:
     validate_xrp_address(seed_phrase: str, target_address: str) -> bool:
         Validates if the XRP address generated from the given seed phrase matches the target address.
     validate_seed(words: list) -> bool:
-        Validates if the provided list of words forms a valid seed phrase and optionally displays the corresponding XRP address.
+        Validates the length and BIP-39 checksum without deriving an address.
     display_addresses(seed_phrase: str) -> str:
         Displays the XRP address generated from the given seed phrase.
     scan_positions_for_address(seed_words: list, target_address: str, wordlist: set) -> list:
@@ -329,16 +329,6 @@ def _missing_batch_worker(task):
     return len(combos), phrases
 
 
-def _validate_seed_worker(words):
-    phrase = " ".join(words)
-    if not _WORKER_MNEMO.check(phrase):
-        return False, None, None
-    try:
-        return True, derive_xrp_address(phrase), None
-    except Exception as exc:
-        return True, None, str(exc)
-
-
 def _pool_results(worker, tasks, processes):
     """Yield unordered results and shut workers down cleanly on Ctrl+C."""
     with mp.Pool(processes=processes, initializer=_init_worker) as pool:
@@ -359,11 +349,6 @@ def validate_seed(words):
     
     if is_valid:
         print("\n✓ Valid seed phrase")
-        try:
-            address = derive_xrp_address(" ".join(words))
-            print(f"XRP Address ({XRP_DERIVATION_PATH}): {address}")
-        except Exception as e:
-            print(f"Note: Valid seed but couldn't generate XRP address: {str(e)}")
     else:
         print("\n✗ Invalid seed phrase")
     return is_valid
@@ -958,8 +943,8 @@ def print_menu():
     [1] 🔄 Scan positions for address match
     [2] 🎯 Search by address pattern
     [3] 🧩 Find missing words
-    [4] ✓ Validate seed phrase
-    [5] 📋 Display addresses
+    [4] ✓ Validate BIP-39 seed phrase
+    [5] 📋 Derive XRP address from seed phrase
     [6] 🔀 Descramble 12 words for a target XRP address
     [7] ✨ Generate new seed
     [8] 📄 Search fixed position tokenlist for XRP address
@@ -997,7 +982,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="12-word XRP seed recovery tool")
     parser.add_argument(
         "--processes", "-p", type=int, default=max(1, os.cpu_count() or 1),
-        help="worker processes for modes 1-4, 6, 8 and 9 (default: all logical CPU cores)"
+        help="worker processes for modes 1-3, 6, 8 and 9 (default: all logical CPU cores)"
     )
     parser.add_argument(
         "--batch-size", type=int, default=1024,
@@ -1026,11 +1011,12 @@ def main():
     mode = input("\n📎 Enter mode number (1-9): ").strip()
     mnemo = Mnemonic("english")
     wordlist = tuple(mnemo.wordlist)
-    print(f"\n⚙️ Multiprocessing workers: {args.processes}")
-    if mode == "8":
-        print(f"📦 Mode 8 batch size: {args.mode8_batch_size:,}")
-    else:
-        print(f"📦 Candidate batch size: {args.batch_size:,}")
+    if mode in {"1", "2", "3", "6", "8", "9"}:
+        print(f"\n⚙️ Multiprocessing workers: {args.processes}")
+        if mode == "8":
+            print(f"📦 Mode 8 batch size: {args.mode8_batch_size:,}")
+        else:
+            print(f"📦 Candidate batch size: {args.batch_size:,}")
 
     if mode == "1":
         print(f"\n🔤 Enter {SEED_LENGTH} positions using 1-5 ? placeholders:")
@@ -1115,19 +1101,7 @@ def main():
     elif mode == "4":
         print(f"\nEnter your {SEED_LENGTH}-word seed phrase:")
         words = input().strip().lower().split()
-        if len(words) == SEED_LENGTH:
-            with mp.Pool(processes=args.processes, initializer=_init_worker) as pool:
-                is_valid, address, error = pool.apply(_validate_seed_worker, (words,))
-            if is_valid:
-                print("\n✓ Valid seed phrase")
-                if address:
-                    print(f"XRP Address ({XRP_DERIVATION_PATH}): {address}")
-                elif error:
-                    print(f"Note: Valid seed but couldn't generate XRP address: {error}")
-            else:
-                print("\n✗ Invalid seed phrase")
-        else:
-            print(f"Seed phrase must contain exactly {SEED_LENGTH} words")
+        validate_seed(words)
 
     elif mode == "5":
         print(f"\nEnter your {SEED_LENGTH}-word seed phrase:")
